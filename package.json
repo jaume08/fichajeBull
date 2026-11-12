@@ -1,0 +1,22 @@
+{
+  "name": "fichajebull",
+  "version": "0.1.0",
+  "description": "Registre de jornada i parts de servei per a empreses de seguretat privada (ET art. 34.9, RGPD/LOPDGDD, Conveni estatal de seguretat privada)",
+  "main": "src/server.js",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "seed": "node --disable-warning=ExperimentalWarning scripts/seed.js",
+    "test": "node --test --no-warnings test/*.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "exceljs": "4.4.0",
+    "express": "4.21.2",
+    "jsonwebtoken": "9.0.2",
+    "pdfkit": "0.15.2"
+  }
+}

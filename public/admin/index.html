@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panell d'Operacions</title>
+<link rel="icon" href="/shared/icon.svg">
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<section id="login" class="login hidden">
+  <form id="loginForm" class="card">
+    <img src="/shared/icon.svg" alt="" width="64" height="64">
+    <h1>Panell RRHH · Operacions · CECOA</h1>
+    <label>Usuari (TIP)<input name="tip" required autocomplete="username"></label>
+    <label>Contrasenya<input name="password" type="password" required autocomplete="current-password"></label>
+    <button class="btn primary">Entrar</button>
+    <p id="loginErr" class="err"></p>
+  </form>
+</section>
+
+<div id="shell" class="shell hidden">
+  <aside>
+    <div class="brand"><img src="/shared/icon.svg" alt="" width="28" height="28"> FichajeBull</div>
+    <nav id="nav"></nav>
+    <div class="who"><span id="who"></span><button id="logout" class="btn small">Sortir</button></div>
+  </aside>
+  <main id="view"></main>
+</div>
+
+<dialog id="dlg"><div id="dlgBody"></div></dialog>
+<div id="toast" class="toast hidden"></div>
+<script src="/admin/admin.js"></script>
+</body>
+</html>

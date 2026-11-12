@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12355b">
+<title>Fitxatge Vigilant</title>
+<link rel="manifest" href="/app/manifest.webmanifest">
+<link rel="icon" href="/shared/icon.svg">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<div id="net" class="net hidden"></div>
+
+<section id="login" class="screen hidden">
+  <div class="login-box">
+    <img src="/shared/icon.svg" alt="" class="logo">
+    <h1>Control de jornada</h1>
+    <form id="loginForm">
+      <label>Número de TIP<input name="tip" autocomplete="username" inputmode="text" required></label>
+      <label>Contrasenya<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary big" type="submit">Entrar</button>
+      <p id="loginErr" class="err"></p>
+    </form>
+    <p class="fine">Les teves dades es tracten d'acord amb el RGPD i la LOPDGDD per complir l'obligació de registre de jornada (art. 34.9 ET). La ubicació només es captura en el moment de fitxar; mai durant el torn.</p>
+  </div>
+</section>
+
+<section id="main" class="screen hidden">
+  <header class="top">
+    <div><strong id="uName"></strong><small id="uTip"></small></div>
+    <button id="logout" class="btn ghost small">Sortir</button>
+  </header>
+
+  <main>
+    <div id="tab-fitxar" class="tab">
+      <div id="stateCard" class="card state"></div>
+      <div id="shiftCard" class="card"></div>
+      <div id="actions" class="actions"></div>
+      <div id="queueInfo" class="card warn hidden"></div>
+      <h3>Últims registres</h3>
+      <ul id="lastEvents" class="list"></ul>
+    </div>
+
+    <div id="tab-part" class="tab hidden">
+      <h2>Part de servei</h2>
+      <form id="reportForm">
+        <div id="incidents"></div>
+        <button type="button" id="addIncident" class="btn">+ Afegir incidència</button>
+        <label class="check"><input type="checkbox" name="no_incidents"> Sense novetats durant el servei</label>
+        <label>Observacions<textarea name="summary" rows="3" maxlength="4000"></textarea></label>
+        <div class="sig-wrap">
+          <div class="sig-head"><span>Signatura del vigilant</span><button type="button" id="sigClear" class="btn ghost small">Esborrar</button></div>
+          <canvas id="sig" height="180"></canvas>
+        </div>
+        <button class="btn primary big" type="submit">Signar i enviar part</button>
+        <p class="fine">En enviar, el servidor hi afegeix un segell de temps i el part queda registrat de forma immutable.</p>
+      </form>
+    </div>
+
+    <div id="tab-hist" class="tab hidden">
+      <h2>Les meves hores</h2>
+      <input type="month" id="histMonth">
+      <div id="hours" class="card"></div>
+      <h3>Parts enviats</h3>
+      <ul id="myReports" class="list"></ul>
+    </div>
+  </main>
+
+  <nav class="bottom">
+    <button data-tab="fitxar" class="active">⏱<span>Fitxar</span></button>
+    <button data-tab="part">📝<span>Part</span></button>
+    <button data-tab="hist">📊<span>Hores</span></button>
+  </nav>
+</section>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3 id="dlgTitle"></h3>
+    <p id="dlgMsg"></p>
+    <div id="dlgBody"></div>
+    <div class="dlg-actions">
+      <button value="cancel" class="btn ghost" formnovalidate>Cancel·lar</button>
+      <button value="ok" class="btn primary" id="dlgOk">Confirmar</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" class="toast hidden"></div>
+<script src="/app/app.js"></script>
+</body>
+</html>

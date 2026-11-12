@@ -1,0 +1,12 @@
+{
+  "name": "FichajeBull · Vigilant",
+  "short_name": "Fitxatge",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1b2d",
+  "theme_color": "#12355b",
+  "lang": "ca",
+  "icons": [{ "src": "/shared/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
