@@ -70,4 +70,9 @@ function require_(perm) {
   return (req, res, next) => (can(req.user.role, perm) ? next() : res.status(403).json({ error: 'Sense permisos' }));
 }
 
-module.exports = { login, authenticate, require: require_, can, hashPassword, publicUser, ROLES };
+function createUser(db, { tip, name, role = 'vigilant', password, dni = null, email = null, phone = null, monthly_hours = null }) {
+  return Number(db.prepare('INSERT INTO users(tip, dni, name, email, phone, role, password_hash, monthly_hours) VALUES (?,?,?,?,?,?,?,?)')
+    .run(String(tip).trim().toUpperCase(), dni, name, email, phone, role, hashPassword(password), monthly_hours).lastInsertRowid);
+}
+
+module.exports = { createUser, login, authenticate, require: require_, can, hashPassword, publicUser, ROLES };

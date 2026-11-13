@@ -154,6 +154,19 @@ Cap rol, ni tan sols l'administrador, pot modificar ni esborrar un registre hora
   - validació de solapaments i de torns de més de 24 h,
   - cancel·lació de torns (només si encara no tenen fitxatges),
   - comparativa entre quadrant i hores reals.
+- **Importació del quadrant de l'empresa (v1.2):**
+  - Es puja l'Excel o el CSV mensual actual, sense canviar la manera de treballar.
+  - El sistema interpreta:
+    - els blocs per servei,
+    - els horaris INICIO/FIN,
+    - les hores normals,
+    - el **plus urgència** (hores negatives, en blau),
+    - les **hores extra** (`E`),
+    - les hores a descomptar (`T`/`F`),
+    - les absències (vacances, baixa IT, falta injustificada).
+  - Abans d'importar mostra una previsualització: serveis, treballadors amb emparellament automàtic, i avisos de totals que no quadren o de solapaments.
+  - Reimportar el quadrant actualitzat substitueix els torns del mes sense duplicar-los. Els torns amb fitxatges no es toquen.
+- **Còmput per servei:** hores del quadrant (normals, urgència, extra) i hores reals fitxades, per servei i per treballador.
 - **Registres i correccions:** consulta per mes i treballador, filtre de registres pendents de revisió i correccions auditades.
 - **Còmput mensual:** taula per treballador i detall diari.
 - **Repositori de parts:** filtres per dates, client i tipus d'incidència. Es poden visualitzar amb la signatura, descarregar en PDF i **enviar al client** si el contracte ho exigeix (cal configurar el correu al servidor). Cada enviament queda auditat.

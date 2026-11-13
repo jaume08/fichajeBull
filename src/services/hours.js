@@ -156,14 +156,40 @@ function monthlyReport(db, userId, month, { now = new Date() } = {}) {
   }
 
   const shifts = db.prepare(
-    `SELECT * FROM shifts WHERE user_id = ? AND status = 'planned' AND planned_end > ? AND planned_start < ? ORDER BY planned_start`
+    `SELECT sh.*, s.name AS site_name FROM shifts sh JOIN sites s ON s.id = sh.site_id
+     WHERE sh.user_id = ? AND sh.status = 'planned' AND sh.planned_end > ? AND sh.planned_start < ? ORDER BY sh.planned_start`
   ).all(userId, range.start.toISOString(), range.end.toISOString());
+  const plannedKind = { normal: 0, urgencia: 0, extra: 0 };
+  const bySite = new Map();
+  const site = (id, name) => { if (!bySite.has(id)) bySite.set(id, { site_id: id, site_name: name, planned: 0, worked: 0, urgencia: 0, extra: 0 }); return bySite.get(id); };
   for (const sh of shifts) {
     const c = clip([Date.parse(sh.planned_start), Date.parse(sh.planned_end)], range); if (!c) continue;
+    // Si el quadrant indica unes hores diferents de la durada de la franja, manen les del quadrant
+    const dur = (Date.parse(sh.planned_end) - Date.parse(sh.planned_start)) / 60e3;
+    const ratio = sh.planned_hours != null && dur > 0 ? (sh.planned_hours * 60) / dur : 1;
     for (const seg of classify(c[0], c[1], opts)) {
-      day(seg.date).planned += seg.minutes; tot.planned += seg.minutes;
-      if (seg.night) tot.planned_night += seg.minutes;
+      const m = seg.minutes * ratio;
+      day(seg.date).planned += m; tot.planned += m;
+      if (seg.night) tot.planned_night += m;
+      plannedKind[sh.kind || 'normal'] += m;
+      const st = site(sh.site_id, sh.site_name); st.planned += m;
+      if (sh.kind === 'urgencia') st.urgencia += m; else if (sh.kind === 'extra') st.extra += m;
     }
+  }
+  const siteNames = new Map(db.prepare('SELECT id, name FROM sites').all().map(x => [x.id, x.name]));
+  for (const s of sessions) {
+    for (const iv of workIntervals(s)) {
+      const c = clip(iv, range); if (!c) continue;
+      site(s.site_id, siteNames.get(s.site_id) || 'Sense instal·lació').worked += (c[1] - c[0]) / 60e3;
+    }
+  }
+
+  // Absències del quadrant (vacances, IT, faltes, hores a descomptar)
+  const absences = db.prepare('SELECT date, type, hours, note, site_id FROM absences WHERE user_id = ? AND date LIKE ? ORDER BY date').all(userId, month + '%');
+  const absByType = {}; let deductedH = 0;
+  for (const a of absences) {
+    absByType[a.type] = (absByType[a.type] || 0) + 1;
+    if (a.type === 'T' || a.type === 'F' || a.type === 'FI') deductedH += a.hours || 0;
   }
 
   // Prolongacions (sortides tardanes) dins del mes
@@ -179,9 +205,11 @@ function monthlyReport(db, userId, month, { now = new Date() } = {}) {
     prolongationMin += o.late_minutes;
   }
 
-  // Torns sense cap fitxatge (absències potencials)
+  // Torns sense cap fitxatge (absències potencials). Els dies amb absència justificada al quadrant no compten.
+  const absentDays = new Set(absences.filter(a => ['VAC', 'IT'].includes(a.type)).map(a => a.date));
   for (const sh of shifts) {
     if (Date.parse(sh.planned_start) > now.getTime()) continue;
+    if (absentDays.has(tz.parts(new Date(sh.planned_start), timezone).date)) continue;
     const covered = sessions.some(s => s.shift_id === sh.id ||
       (Date.parse(s.start) < Date.parse(sh.planned_end) && Date.parse(s.end) > Date.parse(sh.planned_start)));
     if (!covered) anomalies.push({ type: 'TORN_SENSE_FITXATGE', at: sh.planned_start, shift_id: sh.id, message: 'Torn planificat sense cap fitxatge' });
@@ -208,7 +236,15 @@ function monthlyReport(db, userId, month, { now = new Date() } = {}) {
       unpaid_break_h: toH(tot.unpaid_break),
       prolongation_h: toH(prolongationMin),
       prolongation_by_reason_h: Object.fromEntries(Object.entries(prolongations).map(([k, v]) => [k, toH(v)])),
+      planned_normal_h: toH(plannedKind.normal),
+      planned_urgencia_h: toH(plannedKind.urgencia),
+      planned_extra_h: toH(plannedKind.extra),
+      absence_days: absByType,
+      deducted_h: r2(deductedH),
     },
+    by_site: [...bySite.values()].map(x => ({ site_id: x.site_id, site_name: x.site_name, planned_h: toH(x.planned), worked_h: toH(x.worked),
+      urgencia_h: toH(x.urgencia), extra_h: toH(x.extra), diff_h: r2(toH(x.worked) - toH(x.planned)) })).sort((a, b) => b.planned_h - a.planned_h),
+    absences,
     days: [...days.values()].filter(d => d.date.startsWith(month)).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
       date: d.date, worked_h: toH(d.worked), planned_h: toH(d.planned), night_h: toH(d.night),
       weekend_h: toH(d.weekend), holiday_h: toH(d.holiday), paid_break_h: toH(d.paid_break), unpaid_break_h: toH(d.unpaid_break),
@@ -221,4 +257,27 @@ function monthlyReport(db, userId, month, { now = new Date() } = {}) {
   };
 }
 
-module.exports = { monthlyReport, buildSessions, workIntervals, classify };
+/** Còmput per servei (instal·lació): hores del quadrant per tipus vs. hores reals fitxades, per treballador. */
+function serviceReport(db, month, { now = new Date() } = {}) {
+  const S = dbm.settings(db);
+  const range = tz.monthRange(month, S.timezone);
+  const users = db.prepare(`SELECT DISTINCT user_id FROM shifts WHERE status = 'planned' AND planned_end > ? AND planned_start < ?
+    UNION SELECT DISTINCT user_id FROM time_events WHERE occurred_at >= ? AND occurred_at < ?`)
+    .all(range.start.toISOString(), range.end.toISOString(), range.start.toISOString(), range.end.toISOString());
+  const sites = new Map();
+  for (const { user_id } of users) {
+    const m = monthlyReport(db, user_id, month, { now });
+    for (const b of m.by_site) {
+      if (!sites.has(b.site_id)) sites.set(b.site_id, { site_id: b.site_id, site_name: b.site_name, planned_h: 0, worked_h: 0, urgencia_h: 0, extra_h: 0, workers: [] });
+      const st = sites.get(b.site_id);
+      st.planned_h = r2(st.planned_h + b.planned_h); st.worked_h = r2(st.worked_h + b.worked_h);
+      st.urgencia_h = r2(st.urgencia_h + b.urgencia_h); st.extra_h = r2(st.extra_h + b.extra_h);
+      st.workers.push({ user: m.user, ...b });
+    }
+  }
+  const meta = new Map(db.prepare('SELECT s.id, s.address, s.notes, c.name AS client_name FROM sites s JOIN clients c ON c.id = s.client_id').all().map(x => [x.id, x]));
+  return { month, sites: [...sites.values()].map(x => ({ ...x, ...(meta.get(x.site_id) || {}), id: undefined, diff_h: r2(x.worked_h - x.planned_h) }))
+    .sort((a, b) => String(a.site_name).localeCompare(String(b.site_name))) };
+}
+
+module.exports = { serviceReport, monthlyReport, buildSessions, workIntervals, classify };

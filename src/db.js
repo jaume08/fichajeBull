@@ -170,6 +170,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
   hash TEXT NOT NULL
 );
 
+-- Importacions de quadrants (format de l'empresa)
+CREATE TABLE IF NOT EXISTS shift_imports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT NOT NULL,
+  format TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  months TEXT NOT NULL,
+  summary TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+
+-- Absències planificades al quadrant (vacances, baixes IT, faltes, hores a descomptar)
+CREATE TABLE IF NOT EXISTS absences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  site_id INTEGER REFERENCES sites(id),
+  date TEXT NOT NULL,                    -- YYYY-MM-DD (local)
+  type TEXT NOT NULL CHECK (type IN ('VAC','IT','FI','F','T','ALTRES')),
+  hours REAL NOT NULL DEFAULT 0,
+  note TEXT,
+  import_id INTEGER REFERENCES shift_imports(id),
+  UNIQUE (user_id, date, type)
+);
+CREATE INDEX IF NOT EXISTS idx_absences_user_date ON absences(user_id, date);
+
 -- ===== Fase 2: Rondes NFC (estructures preparades) =====
 CREATE TABLE IF NOT EXISTS nfc_checkpoints (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,6 +273,19 @@ const DEFAULT_SETTINGS = {
   company_cif: '',
 };
 
+/** Migracions incrementals per a bases de dades creades amb versions anteriors. */
+const COLUMNS = {
+  users: { phone: 'TEXT' },
+  sites: { notes: 'TEXT' },
+  shifts: { kind: "TEXT NOT NULL DEFAULT 'normal'", planned_hours: 'REAL', import_id: 'INTEGER REFERENCES shift_imports(id)', source_ref: 'TEXT' },
+};
+function migrate(db) {
+  for (const [table, cols] of Object.entries(COLUMNS)) {
+    const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
+    for (const [col, def] of Object.entries(cols)) if (!have.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  }
+}
+
 let instance = null;
 
 function open(file) {
@@ -254,6 +293,7 @@ function open(file) {
   if (dbFile !== ':memory:') fs.mkdirSync(path.dirname(dbFile), { recursive: true });
   const db = new DatabaseSync(dbFile);
   db.exec(SCHEMA);
+  migrate(db);
   db.exec(triggersSql());
   const ins = db.prepare('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)');
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) ins.run(k, v);

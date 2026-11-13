@@ -11,6 +11,7 @@ const audit = require('../services/audit');
 const chain = require('../services/chain');
 const retention = require('../services/retention');
 const tz = require('../services/tz');
+const quadrant = require('../services/quadrantImport');
 const realtime = require('../realtime');
 const { h, ip, isMonth, isDate } = require('./util');
 
@@ -146,6 +147,38 @@ r.post('/shifts/import', need('shifts.write'), express.text({ type: '*/*', limit
   res.json({ created, errors: results });
 }));
 
+/* ---------- Importació de quadrants en el format de l'empresa (Excel / CSV) ---------- */
+const MAX_FILE = 15 * 1024 * 1024;
+function fileFrom(req) {
+  const b64 = String(req.body.file_b64 || '');
+  if (!b64) throw new records.RuleError('FILE_REQUIRED', 'Cal adjuntar el fitxer del quadrant', { status: 400 });
+  const buf = Buffer.from(b64, 'base64');
+  if (!buf.length || buf.length > MAX_FILE) throw new records.RuleError('FILE_SIZE', 'Fitxer buit o massa gran (màx. 15 MB)', { status: 400 });
+  return buf;
+}
+r.post('/quadrants/preview', need('shifts.write'), h(async (req, res) => {
+  const parsed = await quadrant.parseFile(fileFrom(req), req.body.filename || '', dbm.settings().timezone);
+  const p = quadrant.preview(db(), parsed);
+  if (parsed.format === 'csv') p.notices = ["El CSV exportat no conserva el signe negatiu de les hores (el format de cel·la l'amaga), de manera que les hores amb PLUS URGÈNCIA (en blau) s'importen com a normals. Per conservar-les, importa directament el fitxer Excel (.xlsx)."];
+  res.json(p);
+}));
+r.post('/quadrants/commit', need('shifts.write'), h(async (req, res) => {
+  const parsed = await quadrant.parseFile(fileFrom(req), req.body.filename || '', dbm.settings().timezone);
+  if (req.body.sha256 && req.body.sha256 !== parsed.sha256) return res.status(409).json({ error: 'El fitxer no coincideix amb el de la previsualització' });
+  res.json(quadrant.commit(db(), req.user, parsed, req.body.filename, req.body.decisions || {}, ip(req)));
+}));
+r.get('/quadrants/imports', need('dashboard'), h((req, res) => {
+  res.json({ imports: db().prepare(`SELECT i.id, i.filename, i.format, i.months, i.summary, i.created_at, u.name AS author FROM shift_imports i
+    LEFT JOIN users u ON u.id = i.created_by ORDER BY i.id DESC LIMIT 50`).all() });
+}));
+r.get('/absences', need('dashboard'), h((req, res) => {
+  const month = isMonth(req.query.month) ? req.query.month : curMonth();
+  const w = ['a.date LIKE ?']; const p = [month + '%'];
+  if (req.query.user_id) { w.push('a.user_id = ?'); p.push(Number(req.query.user_id)); }
+  res.json({ month, types: quadrant.ABSENCE_TYPES, absences: db().prepare(`SELECT a.*, u.name AS user_name, u.tip, s.name AS site_name FROM absences a
+    JOIN users u ON u.id = a.user_id LEFT JOIN sites s ON s.id = a.site_id WHERE ${w.join(' AND ')} ORDER BY a.date, u.name`).all(...p) });
+}));
+
 r.post('/shifts/:id/cancel', need('shifts.write'), h((req, res) => {
   const d = db();
   const used = d.prepare('SELECT 1 FROM time_events WHERE shift_id = ? LIMIT 1').get(Number(req.params.id));
@@ -192,6 +225,10 @@ r.get('/hours', need('hours'), h((req, res) => {
   if (req.query.user_id) return res.json(hours.monthlyReport(d, Number(req.query.user_id), month));
   const users = d.prepare("SELECT id FROM users WHERE role = 'vigilant' OR id IN (SELECT user_id FROM time_events) ORDER BY name").all();
   res.json({ month, rows: users.map(u => { const m = hours.monthlyReport(d, u.id, month); return { user: m.user, totals: m.totals, anomalies: m.anomalies }; }) });
+}));
+
+r.get('/hours/services', need('hours'), h((req, res) => {
+  res.json(hours.serviceReport(db(), isMonth(req.query.month) ? req.query.month : curMonth()));
 }));
 
 /* ---------- Parts de servei ---------- */

@@ -54,3 +54,5 @@ dialog::backdrop { background:rgba(0,0,0,.45); }
 @keyframes pulse { 50% { opacity:.3; } }
 .feed { max-height:260px; overflow:auto; font-size:.84rem; } .feed div { padding:4px 0; border-bottom:1px dashed var(--line); }
 @media (max-width:820px) { .shell { grid-template-columns:1fr; } aside { position:static; height:auto; } nav { display:flex; overflow-x:auto; } nav a { white-space:nowrap; border-left:0; border-bottom:3px solid transparent; } main { padding:14px 16px; } }
+.k-urgencia { background:#cdeefc; color:#035b80; } .k-extra { background:#fde9c4; color:#7a4a00; }
+details summary { cursor:pointer; }

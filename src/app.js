@@ -24,6 +24,7 @@ function createApp({ mailer = null } = {}) {
     if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
+  app.use('/api/admin/quadrants', express.json({ limit: '25mb' })); // fitxers de quadrant en base64
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));

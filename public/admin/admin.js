@@ -15,6 +15,9 @@
   const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: TZ() });
   const TYPE = { IN: 'Entrada', OUT: 'Sortida', BREAK_START: 'Inici pausa', BREAK_END: 'Fi pausa' };
   const STATUS = { EN_SERVEI: 'En servei', EN_SERVEI_AMB_RETARD: 'En servei (retard)', PAUSA: 'Pausa', PROLONGACIO: 'Prolongació', RETARD: 'Retard', ABSENT: 'Absent', PENDENT: 'Pendent', FINALITZAT: 'Finalitzat' };
+  const KIND = { normal: 'Normal', urgencia: 'Plus urgència', extra: 'Hora extra' };
+  const ABS = { VAC: 'Vacances', IT: 'Baixa IT', FI: 'Falta injustificada', F: 'Falta', T: 'A descomptar', ALTRES: 'Altres' };
+  const kindPill = k => k && k !== 'normal' ? `<span class="pill k-${k}">${KIND[k]}</span>` : '';
   const LATE = { ESPERA_RELLEU: 'Espera de relleu', INCIDENCIA_SERVEI: 'Incidència servei', ORDRE_SUPERIOR: 'Ordre superior', ALTRES: 'Altres' };
 
   async function api(path, opts = {}) {
@@ -65,8 +68,10 @@
   const VIEWS = [
     ['dashboard', 'Temps real', 'dashboard', viewDashboard],
     ['quadrants', 'Quadrants', 'dashboard', viewShifts],
+    ['importar', 'Importar quadrant', 'shifts.write', viewImport],
     ['registres', 'Registres i correccions', 'dashboard', viewEvents],
     ['hores', 'Còmput mensual', 'hours', viewHours],
+    ['serveis', 'Còmput per servei', 'hours', viewServices],
     ['parts', 'Parts de servei', 'reports.read', viewReports],
     ['inspeccio', 'Inspecció de Treball', 'export', viewExport],
     ['usuaris', 'Personal', 'dashboard', viewUsers],
@@ -134,19 +139,23 @@
     const w = can('shifts.write');
     $('#view').innerHTML = `<h1>Quadrants</h1>
       <div class="toolbar"><label>Mes<input type="month" id="sMonth" value="${month}"></label>
-      ${w ? '<button class="btn primary" id="sNew">+ Nou torn</button><button class="btn" id="sImp">Importar quadrant (CSV)</button>' : ''}</div>
+      ${w ? '<button class="btn primary" id="sNew">+ Nou torn</button><a class="btn" href="#importar">Importar quadrant (Excel/CSV)</a><button class="btn" id="sImp">Importació simple (TIP;…)</button>' : ''}</div>
       <h2>Quadrant teòric vs. hores reals</h2>
       ${table([
         { h: 'Treballador', f: r => `${esc(r.user.name)} <span class="muted">${esc(r.user.tip)}</span>` },
         { h: 'Quadrant', num: 1, f: r => r.totals.planned_h }, { h: 'Real', num: 1, f: r => r.totals.worked_h },
         { h: 'Diferència', num: 1, f: r => `<span class="${Math.abs(r.totals.diff_vs_planned_h) > 1 ? 'flag' : ''}">${r.totals.diff_vs_planned_h > 0 ? '+' : ''}${r.totals.diff_vs_planned_h}</span>` },
+        { h: 'Urgència', num: 1, f: r => r.totals.planned_urgencia_h || '' }, { h: 'Extra', num: 1, f: r => r.totals.planned_extra_h || '' },
+        { h: 'Absències', f: r => Object.entries(r.totals.absence_days || {}).map(([k, v]) => `${ABS[k]}: ${v}`).join(', ') },
         { h: 'Jornada', num: 1, f: r => r.totals.contract_h }, { h: 'Anomalies', num: 1, f: r => r.anomalies ? `<span class="flag">${r.anomalies}</span>` : '0' },
       ], cmp.rows)}
       <h2>Torns planificats (${sh.shifts.length})</h2>
       ${table([
         { h: 'Inici', f: r => fDT(r.planned_start) }, { h: 'Fi', f: r => fDT(r.planned_end) },
         { h: 'Vigilant', f: r => `${esc(r.user_name)} <span class="muted">${esc(r.tip)}</span>` }, { h: 'Servei', f: r => `${esc(r.client_name)} · ${esc(r.site_name)}` },
+        { h: 'Hores', num: 1, f: r => r.planned_hours ?? '' }, { h: 'Tipus', f: r => kindPill(r.kind) },
         { h: 'Estat', f: r => r.status === 'cancelled' ? '<span class="muted">Cancel·lat</span>' : 'Planificat' },
+        { h: 'Origen', f: r => r.source_ref ? `<span class="muted">${esc(r.source_ref)}</span>` : '' },
         { h: '', f: r => w && r.status === 'planned' ? `<button class="btn small danger" data-cancel="${r.id}">Cancel·lar</button>` : '' },
       ], sh.shifts)}`;
     $('#sMonth').onchange = guard(viewShifts);
@@ -241,6 +250,8 @@
         { h: 'Extra', num: 1, f: r => r.totals.overtime_h ? `<b>${r.totals.overtime_h}</b>` : 0 }, { h: 'Dèficit', num: 1, f: r => r.totals.deficit_h },
         { h: 'Nocturnes', num: 1, f: r => r.totals.night_h }, { h: 'Cap setm.', num: 1, f: r => r.totals.weekend_h }, { h: 'Festius', num: 1, f: r => r.totals.holiday_h },
         { h: 'Prolong.', num: 1, f: r => r.totals.prolongation_h }, { h: 'Pausa comp.', num: 1, f: r => r.totals.paid_break_h },
+        { h: 'Urgència (q.)', num: 1, f: r => r.totals.planned_urgencia_h || '' }, { h: 'Extra (q.)', num: 1, f: r => r.totals.planned_extra_h || '' },
+        { h: 'Absències', f: r => Object.entries(r.totals.absence_days || {}).map(([k, v]) => `${ABS[k]} ${v}`).join(', ') + (r.totals.deducted_h ? ` · −${r.totals.deducted_h} h` : '') },
         { h: 'Anomalies', f: r => r.anomalies.length ? `<span class="flag">${r.anomalies.length}</span>` : '' },
       ], d.rows)}<div id="hDetail"></div>`;
     $('#hMonth').onchange = guard(viewHours);
@@ -248,10 +259,114 @@
       ev.preventDefault();
       const m = await api(`/admin/hours?month=${month}&user_id=${a.dataset.u}`);
       $('#hDetail').innerHTML = `<h2>Detall · ${esc(m.user.name)} · ${m.month}</h2>
+        ${table([{ h: 'Servei', f: r => esc(r.site_name) }, { h: 'Quadrant', num: 1, f: r => r.planned_h }, { h: 'Real', num: 1, f: r => r.worked_h },
+          { h: 'Diferència', num: 1, f: r => `<span class="${Math.abs(r.diff_h) > 1 ? 'flag' : ''}">${r.diff_h}</span>` }, { h: 'Urgència', num: 1, f: r => r.urgencia_h || '' }, { h: 'Extra', num: 1, f: r => r.extra_h || '' }], m.by_site)}
+        ${m.absences.length ? `<div class="card"><b>Absències del quadrant</b><br>${m.absences.map(a => `${a.date} · ${ABS[a.type]}${a.hours ? ` (${a.hours} h)` : ''}`).join('<br>')}</div>` : ''}
         ${m.anomalies.length ? `<div class="card"><b class="flag">Anomalies</b><br>${m.anomalies.map(x => `${fDT(x.at)} · ${esc(x.message)}`).join('<br>')}</div>` : ''}
         ${table([{ h: 'Dia', f: r => r.date }, { h: 'Real', num: 1, f: r => r.worked_h }, { h: 'Quadrant', num: 1, f: r => r.planned_h }, { h: 'Nocturnes', num: 1, f: r => r.night_h },
           { h: 'Cap setm.', num: 1, f: r => r.weekend_h }, { h: 'Festiu', num: 1, f: r => r.holiday_h }, { h: 'Pausa comp.', num: 1, f: r => r.paid_break_h }, { h: 'Pausa desc.', num: 1, f: r => r.unpaid_break_h }], m.days)}`;
       $('#hDetail').scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+
+  /* ---------- Còmput per servei ---------- */
+  async function viewServices() {
+    const month = $('#svMonth')?.value || thisMonth();
+    const d = await api('/admin/hours/services?month=' + month);
+    const tot = k => Math.round(d.sites.reduce((a, x) => a + x[k], 0) * 100) / 100;
+    $('#view').innerHTML = `<h1>Còmput per servei</h1>
+      <div class="toolbar"><label>Mes<input type="month" id="svMonth" value="${month}"></label></div>
+      <div class="kpis"><div class="kpi"><b>${d.sites.length}</b><span>Serveis amb activitat</span></div><div class="kpi"><b>${tot('planned_h')}</b><span>Hores al quadrant</span></div>
+        <div class="kpi ok"><b>${tot('worked_h')}</b><span>Hores fitxades</span></div><div class="kpi warn"><b>${tot('urgencia_h')}</b><span>Plus urgència (quadrant)</span></div>
+        <div class="kpi"><b>${tot('extra_h')}</b><span>Hores extra (quadrant)</span></div></div>
+      ${table([
+        { h: 'Servei', f: r => `<a href="#" data-sv="${r.site_id}">${esc(r.site_name)}</a>${r.client_name && r.client_name !== r.site_name ? ` <span class="muted">${esc(r.client_name)}</span>` : ''}` },
+        { h: 'Quadrant', num: 1, f: r => r.planned_h }, { h: 'Real', num: 1, f: r => r.worked_h },
+        { h: 'Diferència', num: 1, f: r => `<span class="${Math.abs(r.diff_h) > 1 ? 'flag' : ''}">${r.diff_h > 0 ? '+' : ''}${r.diff_h}</span>` },
+        { h: 'Urgència', num: 1, f: r => r.urgencia_h || '' }, { h: 'Extra', num: 1, f: r => r.extra_h || '' }, { h: 'Treballadors', num: 1, f: r => r.workers.length },
+        { h: 'Tarifa / nota', f: r => `<span class="muted">${esc(r.notes || '')}</span>` },
+      ], d.sites)}<div id="svDetail"></div>`;
+    $('#svMonth').onchange = guard(viewServices);
+    for (const a of document.querySelectorAll('[data-sv]')) a.onclick = e => {
+      e.preventDefault(); const sv = d.sites.find(x => String(x.site_id) === a.dataset.sv);
+      $('#svDetail').innerHTML = `<h2>${esc(sv.site_name)} · ${month}</h2>${sv.address ? `<p class="muted">${esc(sv.address)}</p>` : ''}
+        ${table([{ h: 'Treballador', f: r => `${esc(r.user.name)} <span class="muted">${esc(r.user.tip)}</span>` }, { h: 'Quadrant', num: 1, f: r => r.planned_h },
+          { h: 'Real', num: 1, f: r => r.worked_h }, { h: 'Diferència', num: 1, f: r => r.diff_h }, { h: 'Urgència', num: 1, f: r => r.urgencia_h || '' }, { h: 'Extra', num: 1, f: r => r.extra_h || '' }], sv.workers)}`;
+      $('#svDetail').scrollIntoView({ behavior: 'smooth' });
+    };
+  }
+
+  /* ---------- Importació de quadrants (format de l'empresa) ---------- */
+  async function viewImport() {
+    const hist = await api('/admin/quadrants/imports');
+    $('#view').innerHTML = `<h1>Importar quadrant</h1>
+      <div class="card">Puja el quadrant mensual tal com el feu ara (<b>Excel .xlsx</b>, recomanat, o la seva exportació <b>.csv</b>). Es llegeixen tots els fulls i blocs de servei:
+        horaris INICIO/FIN (inclosos els torns de nit), hores normals, <b>plus urgència</b> (hores en negatiu / blau), <b>hores extra</b> (<code>8E</code>), hores a descomptar (<code>T</code>/<code>F</code>)
+        i absències (<code>VAC</code>, <code>BAJA/IT</code>, <code>FI</code>). Abans d'importar veuràs una previsualització per revisar treballadors i serveis.</div>
+      <div class="card toolbar"><label>Fitxer del quadrant<input type="file" id="qFile" accept=".xlsx,.csv"></label><button class="btn primary" id="qGo">Analitzar</button></div>
+      <div id="qOut"></div>
+      <h2>Importacions anteriors</h2>${table([{ h: 'Data', f: r => fDT(r.created_at) }, { h: 'Fitxer', f: r => esc(r.filename) }, { h: 'Mesos', f: r => esc(r.months) },
+        { h: 'Resultat', wrap: 1, f: r => { const x = JSON.parse(r.summary || '{}'); return `${x.created ?? 0} creats · ${x.kept ?? 0} mantinguts · ${x.cancelled ?? 0} cancel·lats · ${x.absences ?? 0} absències${x.errors?.length ? ` · <span class="flag">${x.errors.length} errors</span>` : ''}`; } },
+        { h: 'Autor', f: r => esc(r.author || '') }], hist.imports)}`;
+    $('#qGo').onclick = guard(async () => {
+      const f = $('#qFile').files[0]; if (!f) throw new Error('Selecciona un fitxer');
+      const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(String(rd.result).split(',')[1]); rd.onerror = rej; rd.readAsDataURL(f); });
+      $('#qOut').innerHTML = '<p class="muted">Analitzant…</p>';
+      const p = await api('/admin/quadrants/preview', { method: 'POST', body: { file_b64: b64, filename: f.name } });
+      renderPreview(p, b64, f.name);
+    });
+  }
+
+  function renderPreview(p, b64, filename) {
+    const sum = (k) => Math.round(p.blocks.reduce((a, b) => a + b.hours[k], 0) * 100) / 100;
+    const siteSel = b => `<select data-site="${b.index}"><option value="create" ${!b.suggested_site_id && b.shifts ? 'selected' : ''}>➕ Crear instal·lació nova</option>
+      <option value="skip" ${!b.shifts && !b.suggested_site_id ? 'selected' : ''}>No importar torns</option>
+      ${p.sites.map(s => `<option value="${s.id}" ${s.id === b.suggested_site_id ? 'selected' : ''}>${esc(s.client_name)} · ${esc(s.name)}</option>`).join('')}</select>`;
+    const userSel = w => `<select data-w="${esc(w.key)}">
+      <option value="create" ${w.match === 'nou' ? 'selected' : ''}>➕ Crear usuari nou</option><option value="skip" ${w.match === 'ambigu' ? 'selected' : ''}>No importar</option>
+      ${p.users.map(u => `<option value="${u.id}" ${u.id === w.suggested_user_id ? 'selected' : ''}>${esc(u.name)} (${esc(u.tip)})</option>`).join('')}</select>
+      <input data-tip="${esc(w.key)}" placeholder="TIP (opcional)" style="width:120px;min-width:0;${w.match === 'nou' ? '' : 'display:none'}">`;
+    const groups = {};
+    for (const w of p.warnings) { const g = /se solapa/.test(w) ? 'Solapaments dins del fitxer' : /TOTAL HORAS/.test(w) ? 'Totals que no quadren' : /dura .* però/.test(w) ? 'Durada de franja ≠ hores del quadrant' : 'Altres avisos'; (groups[g] = groups[g] || []).push(w); }
+    $('#qOut').innerHTML = `
+      ${(p.notices || []).map(n => `<div class="card" style="border-color:var(--warn)">⚠️ ${esc(n)}</div>`).join('')}
+      ${p.previous_import ? `<div class="card" style="border-color:var(--warn)">⚠️ Aquest mateix fitxer ja es va importar el ${fDT(p.previous_import.created_at)}. Tornar-lo a importar no duplica torns: els idèntics es mantenen.</div>` : ''}
+      <div class="kpis"><div class="kpi"><b>${p.months.join(', ')}</b><span>Mes</span></div><div class="kpi"><b>${p.blocks.length}</b><span>Serveis</span></div>
+        <div class="kpi"><b>${p.workers.length}</b><span>Treballadors</span></div><div class="kpi"><b>${p.blocks.reduce((a, b) => a + b.shifts, 0)}</b><span>Torns</span></div>
+        <div class="kpi"><b>${sum('normal')}</b><span>Hores normals</span></div><div class="kpi warn"><b>${sum('urgencia')}</b><span>Plus urgència</span></div><div class="kpi"><b>${sum('extra')}</b><span>Hores extra</span></div></div>
+      <h2>Serveis</h2>
+      ${table([{ h: 'Full', f: b => esc(b.sheet) }, { h: 'Servei', f: b => `<b>${esc(b.service)}</b><br><span class="muted">${esc(b.address || '')}</span>` },
+        { h: 'Torns', num: 1, f: b => b.shifts }, { h: 'Normals', num: 1, f: b => b.hours.normal }, { h: 'Urgència', num: 1, f: b => b.hours.urgencia || '' }, { h: 'Extra', num: 1, f: b => b.hours.extra || '' },
+        { h: 'Absències', f: b => Object.entries(b.absences).map(([k, v]) => `${ABS[k]}: ${v}`).join('<br>') },
+        { h: 'Total full', num: 1, f: b => `${b.declared_total} ${Math.abs(b.declared_total - b.computed_total) < 0.01 ? '✓' : `<span class="flag">≠ ${b.computed_total}</span>`}` },
+        { h: 'Instal·lació', f: siteSel }], p.blocks)}
+      <h2>Treballadors</h2><p class="muted">Emparellament automàtic per nom i telèfon. Els usuaris nous es creen amb una contrasenya temporal (es mostrarà en acabar). Si no indiques TIP se'n genera un d'intern (Q0001…).</p>
+      ${table([{ h: 'Nom al quadrant', f: w => `<b>${esc(w.name)}</b>` }, { h: 'Telèfon', f: w => esc(w.phone) }, { h: 'Jornada', f: w => esc(w.jornadas.filter(Boolean).join(' + ')) + (w.suggested_monthly_hours ? ` <span class="muted">→ ${w.suggested_monthly_hours} h/mes</span>` : '') },
+        { h: 'Observacions', wrap: 1, f: w => esc(w.observations.join('; ')) }, { h: 'Serveis', wrap: 1, f: w => esc(w.services.join(', ')) },
+        { h: 'Torns / hores', num: 1, f: w => `${w.shifts} / ${w.hours}` }, { h: 'Coincidència', f: w => w.match === 'nou' ? '<span class="muted">nou</span>' : w.match === 'ambigu' ? '<span class="flag">ambigu</span>' : '✓ ' + w.match },
+        { h: 'Usuari', f: userSel }], p.workers)}
+      ${p.warnings.length ? `<h2>Avisos (${p.warnings.length})</h2>${Object.entries(groups).map(([g, l]) => `<details class="card"><summary><b>${esc(g)}</b> (${l.length})</summary><div class="feed" style="max-height:320px">${l.slice(0, 500).map(x => `<div>${esc(x)}</div>`).join('')}</div></details>`).join('')}` : '<p>✓ Cap avís.</p>'}
+      <div class="card toolbar"><button class="btn primary" id="qCommit">Importar quadrant</button><span class="muted">Per a cada servei i mes, els torns planificats que ja no surtin al fitxer (i sense fitxatges) es cancel·laran; els idèntics es mantenen.</span></div>`;
+    for (const sel of document.querySelectorAll('[data-w]')) sel.onchange = () => { document.querySelector(`[data-tip="${CSS.escape(sel.dataset.w)}"]`).style.display = sel.value === 'create' ? '' : 'none'; };
+    $('#qCommit').onclick = guard(async () => {
+      const workers = {}; const sites = {};
+      for (const sel of document.querySelectorAll('[data-w]')) {
+        const v = sel.value; workers[sel.dataset.w] = v === 'create' ? { action: 'create', tip: document.querySelector(`[data-tip="${CSS.escape(sel.dataset.w)}"]`).value } : v === 'skip' ? { action: 'skip' } : { action: 'map', user_id: Number(v) };
+      }
+      for (const sel of document.querySelectorAll('[data-site]')) { const v = sel.value; sites[sel.dataset.site] = v === 'create' ? { action: 'create' } : v === 'skip' ? { action: 'skip' } : { action: 'map', site_id: Number(v) }; }
+      const nNew = Object.values(workers).filter(w => w.action === 'create').length;
+      if (!confirm(`Importar el quadrant? Es crearan ${nNew} usuaris nous.`)) return;
+      $('#qCommit').disabled = true;
+      const r = await api('/admin/quadrants/commit', { method: 'POST', body: { file_b64: b64, filename, sha256: p.sha256, decisions: { workers, sites } } });
+      $('#qOut').innerHTML = `<div class="card"><h2>✓ Quadrant importat</h2>
+        <div class="kpis"><div class="kpi ok"><b>${r.created}</b><span>Torns creats</span></div><div class="kpi"><b>${r.kept}</b><span>Ja existents (mantinguts)</span></div>
+        <div class="kpi warn"><b>${r.cancelled}</b><span>Torns antics cancel·lats</span></div><div class="kpi"><b>${r.absences}</b><span>Absències</span></div>
+        <div class="kpi bad"><b>${r.errors.length}</b><span>Errors</span></div></div>
+        ${r.kept_with_events ? `<p class="muted">${r.kept_with_events} torns que ja no surten al fitxer s'han mantingut perquè tenen fitxatges.</p>` : ''}
+        ${r.sites_created.length ? `<p>Instal·lacions creades: ${r.sites_created.map(x => esc(x.name)).join(', ')}. <b>Recorda indicar-ne les coordenades i el radi</b> a "Clients i instal·lacions" perquè funcioni la geolocalització.</p>` : ''}
+        ${r.users_created.length ? `<h2>Usuaris creats — contrasenyes temporals</h2><p class="flag">Anota-les ara: no es tornaran a mostrar.</p>${table([{ h: 'TIP / usuari', f: u => `<b>${esc(u.tip)}</b>` }, { h: 'Nom', f: u => esc(u.name) }, { h: 'Contrasenya temporal', f: u => `<code>${esc(u.password)}</code>` }], r.users_created)}` : ''}
+        ${r.errors.length ? `<details open><summary class="flag">Errors (${r.errors.length})</summary><div class="feed">${r.errors.map(e => `<div>${esc(e)}</div>`).join('')}</div></details>` : ''}
+        <p><a class="btn" href="#quadrants">Veure quadrants</a> <a class="btn" href="#serveis">Còmput per servei</a></p></div>`;
     });
   }
 

@@ -63,12 +63,15 @@ async function toExcel(db, opts) {
     { header: 'Hores extra', key: 'ot', width: 10 }, { header: 'Nocturnes', key: 'night', width: 10 },
     { header: 'Cap de setmana', key: 'we', width: 10 }, { header: 'Festius', key: 'hol', width: 10 },
     { header: 'Prolongacions', key: 'prol', width: 12 }, { header: 'Pauses retribuïdes', key: 'pb', width: 12 },
+    { header: 'Urgència (quadrant)', key: 'urg', width: 12 }, { header: 'Extra (quadrant)', key: 'ext', width: 12 },
+    { header: 'Dies vacances', key: 'vac', width: 10 }, { header: 'Dies IT', key: 'it', width: 8 }, { header: 'Hores descomptades', key: 'ded', width: 12 },
     { header: 'Anomalies', key: 'anom', width: 10 },
   ];
   for (const w of data.workers) for (const m of w.monthly) {
     sum.addRow({ tip: w.user.tip, name: w.user.name, dni: w.user.dni || '', month: m.month, worked: m.totals.worked_h,
       planned: m.totals.planned_h, contract: m.totals.contract_h, ot: m.totals.overtime_h, night: m.totals.night_h,
-      we: m.totals.weekend_h, hol: m.totals.holiday_h, prol: m.totals.prolongation_h, pb: m.totals.paid_break_h, anom: m.anomalies.length });
+      we: m.totals.weekend_h, hol: m.totals.holiday_h, prol: m.totals.prolongation_h, pb: m.totals.paid_break_h, anom: m.anomalies.length,
+      urg: m.totals.planned_urgencia_h, ext: m.totals.planned_extra_h, vac: m.totals.absence_days.VAC || 0, it: m.totals.absence_days.IT || 0, ded: m.totals.deducted_h });
   }
   sum.getRow(1).font = { bold: true };
   const reg = wb.addWorksheet('Registre de jornada');
