@@ -1,0 +1,15 @@
+services:
+  fichajebull:
+    build: .
+    container_name: fichajebull
+    ports:
+      - "3100:3000"   # http://localhost:3100 (el 3000 del PC queda lliure per a l'altra aplicació)
+    environment:
+      TZ: Europe/Madrid
+      JWT_SECRET: canvia-aquesta-clau-per-una-de-llarga-i-aleatoria
+    volumes:
+      - fichaje-data:/app/data   # la base de dades persisteix encara que s'esborri el contenidor
+    restart: unless-stopped
+
+volumes:
+  fichaje-data:

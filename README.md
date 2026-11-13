@@ -8,7 +8,30 @@ Registre de jornada i parts de servei digitals per a empreses de seguretat priva
 
 L'especificació funcional i legal completa, sense codi, és a [`docs/ESPECIFICACIO_FUNCIONAL.md`](docs/ESPECIFICACIO_FUNCIONAL.md).
 
-## Posada en marxa
+## Executar amb Docker (Windows, Mac o Linux)
+
+L'aplicació s'exposa al port **3100** del PC, per no xocar amb res que ja corri al 3000.
+
+```bash
+git clone -b claude/nice-lamport-mjo9sp https://github.com/jaume08/fichajeBull.git
+```
+
+```bash
+cd fichajeBull
+```
+
+```bash
+docker compose up -d --build
+```
+
+- Vigilant: http://localhost:3100/app/
+- Oficina: http://localhost:3100/admin/
+
+La primera vegada es carreguen les dades de demo. La base de dades es desa al volum `fichaje-data` i es conserva entre reinicis. Per veure els logs: `docker compose logs -f`. Per aturar-lo: `docker compose down`. Per esborrar-ho tot, dades incloses: `docker compose down -v`.
+
+Per canviar el port, edita `"3100:3000"` a `docker-compose.yml`. Canvia també `JWT_SECRET` per una clau pròpia.
+
+## Posada en marxa (sense Docker)
 
 Cal Node.js ≥ 22.13.
 
